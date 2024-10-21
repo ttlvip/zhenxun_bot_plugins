@@ -9,6 +9,7 @@ from tortoise.functions import Sum
 from zhenxun.configs.config import Config
 from zhenxun.configs.path_config import IMAGE_PATH
 from zhenxun.models.sign_user import SignUser
+from zhenxun.models.user_console import UserConsole
 from zhenxun.services.log import logger
 from zhenxun.utils._build_image import BuildImage
 from zhenxun.utils._image_template import ImageTemplate
@@ -59,6 +60,8 @@ def add_count(user: OpenCasesUser, skin: BuffSkin, case_price: float):
             user.knife_st_count += 1
         else:
             user.knife_count += 1
+    user.today_open_total += 1
+    user.total_count += 1
     user.make_money += skin.sell_min_price
     user.spend_money += int(17 + case_price)
 
@@ -148,7 +151,7 @@ class OpenCaseManager:
 
     @classmethod
     async def __open_check(
-        cls, case_name: str | None, user_id: str, group_id: str
+        cls, case_name: str | None, user_id: str, group_id: str, platform: str
     ) -> tuple[OpenCasesUser | UniMessage, str, int]:
         """开箱前检查
 
@@ -156,6 +159,7 @@ class OpenCaseManager:
             case_name: 箱子名称
             user_id: 用户给id
             group_id: 群组id
+            platform: 平台
 
         返回:
             tuple[OpenCasesUser | UniMessage, str, int]: 开箱用户或返回消息和箱子名称和最大开箱数
@@ -166,8 +170,10 @@ class OpenCaseManager:
             case_name = random.choice(CaseManager.CURRENT_CASES)  # type: ignore
         if case_name and case_name not in CaseManager.CURRENT_CASES:
             return (
-                "武器箱未收录, 当前可用武器箱:\n"
-                + ", ".join(CaseManager.CURRENT_CASES),  # type: ignore
+                MessageUtils.build_message(
+                    "武器箱未收录, 当前可用武器箱:\n"
+                    + ", ".join(CaseManager.CURRENT_CASES)  # type: ignore
+                ),
                 "",
                 0,
             )
@@ -176,7 +182,7 @@ class OpenCaseManager:
             group_id=group_id,
             defaults={"open_cases_time_last": datetime.now()},
         )
-        max_count = await cls.get_user_max_count(user_id)
+        max_count = await cls.get_user_max_count(user_id, platform)
         # 一天次数上限
         if user.today_open_total >= max_count:
             return (
@@ -323,24 +329,37 @@ class OpenCaseManager:
         session: EventSession,
     ) -> UniMessage:
         user, case_name, max_count = await cls.__open_check(
-            case_name, user_id, group_id
+            case_name, user_id, group_id, session.platform
         )
         if not isinstance(user, OpenCasesUser):
             return user
+        if user.today_open_total + num > max_count:
+            return MessageUtils.build_message(
+                "当前剩余开箱次数不足，"
+                f"当前剩余开箱次数: {max_count - user.today_open_total}"
+            )
         logger.debug(f"尝试开启武器箱: {case_name}", "开箱", session=session)
         return await cls.__start_open_one(case_name, user, num, max_count, session)
 
     @classmethod
-    async def get_user_max_count(cls, user_id: str) -> int:
+    async def get_user_max_count(cls, user_id: str, platform: str) -> int:
         """获取用户最大开箱次数
 
         参数:
             user_id: 用户id
+            platform: 平台
 
         返回:
             int: 用户最大开箱次数
         """
-        user, _ = await SignUser.get_or_create(user_id=user_id)
+        try:
+            user, _ = await SignUser.get_or_create(user_id=user_id)
+        except Exception:
+            logger.warning("开箱获取签到用户失败，已创建新用户...", "开箱")
+            user = await UserConsole.get_user(user_id, platform)
+            user, _ = await SignUser.get_or_create(
+                user_id=user_id, defaults={"user_console": user}
+            )
         impression = int(user.impression)
         initial_open_case_count = base_config.get("INITIAL_OPEN_CASE_COUNT")
         each_impression_add_count = base_config.get("EACH_IMPRESSION_ADD_COUNT")
