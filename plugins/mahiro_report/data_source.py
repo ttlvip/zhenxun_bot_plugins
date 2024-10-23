@@ -7,15 +7,16 @@ from nonebot_plugin_htmlrender import template_to_pic
 
 from zhenxun.utils.http_utils import AsyncHttpx
 from zhenxun.utils._build_image import BuildImage
+from zhenxun.configs.config import Config
 from zhenxun.configs.path_config import TEMPLATE_PATH
 
-from .config import REPORT_PATH, Anime, SixData, Hitokoto, favs_arr, favs_list
+from .config import REPORT_PATH, Anime, Hitokoto, SixData, favs_arr, favs_list
 
 
 class Report:
     hitokoto_url = "https://v1.hitokoto.cn/?c=a"
+    alapi_url = "https://v2.alapi.cn/api/zaobao"
     six_url = "https://60s.viki.moe/?v2=1"
-    game_url = "https://www.4gamers.com.tw/rss/latest-news"
     bili_url = "https://s.search.bilibili.com/main/hotword"
     it_url = "https://www.ithome.com/rss/"
     anime_url = "https://api.bgm.tv/calendar"
@@ -95,8 +96,23 @@ class Report:
         return [item["keyword"] for item in data["list"]]
 
     @classmethod
+    async def get_alapi_data(cls) -> list[str]:
+        """获取alapi数据"""
+        token = Config.get_config("alapi", "ALAPI_TOKEN")  # 从配置中获取alapi
+        payload = {"token": token, "format": "json"}
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        res = await AsyncHttpx.post(cls.alapi_url, data=payload, headers=headers)
+        if res.status_code != 200:
+            return ["Error: Unable to fetch data"]
+        data = res.json()
+        news_items = data.get("data", {}).get("news", [])
+        return news_items[:11] if len(news_items) > 11 else news_items
+
+    @classmethod
     async def get_six(cls) -> list[str]:
-        """获取60s看时间数据"""
+        """获取60s数据"""
+        if Config.get_config("alapi", "ALAPI_TOKEN"):
+            return await cls.get_alapi_data()
         res = await AsyncHttpx.get(cls.six_url)
         data = SixData(**res.json())
         return data.data.news[:11] if len(data.data.news) > 11 else data.data.news
@@ -123,5 +139,7 @@ class Report:
             anime = Anime(**res.json()[week])
         except IndexError:
             anime = Anime(**res.json()[-1])
-        data_list.extend((data.name_cn or data.name, data.image) for data in anime.items)
+        data_list.extend(
+            (data.name_cn or data.name, data.image) for data in anime.items
+        )
         return data_list[:8] if len(data_list) > 8 else data_list
