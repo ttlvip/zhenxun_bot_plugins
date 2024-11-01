@@ -27,7 +27,6 @@ __plugin_meta__ = PluginMetadata(
     description="这里是PIX图库！",
     usage="""
     指令：
-        引用消息 /info
         引用消息 /block    : block该pid
         引用消息 /block -u : block该uid下的所有图片
         引用消息 / nsfw n : 设置nsfw等级 n = [0, 1, 2] 其中
@@ -63,14 +62,6 @@ def reply_check() -> Rule:
     return Rule(_rule)
 
 
-_info_matcher = on_alconna(
-    Alconna(["/"], "info"),
-    priority=5,
-    block=True,
-    use_cmd_start=False,
-    rule=reply_check(),
-)
-
 _block_matcher = on_alconna(
     Alconna(
         ["/"], "block", Option("-u|--uid", action=store_true, help_text="是否是uid")
@@ -90,28 +81,12 @@ _nsfw_matcher = on_alconna(
 )
 
 
-@_info_matcher.handle()
-async def _(bot: Bot, event: Event):
-    reply: Reply | None = await reply_fetch(event, bot)
-    if reply and (pix_model := InfoManage.get(str(reply.id))):
-        result = f"""title: {pix_model.title}
-author: {pix_model.author}
-pid: {pix_model.pid}-{pix_model.img_p}
-uid: {pix_model.uid}
-nsfw: {pix_model.nsfw_tag}
-tags: {pix_model.tags}""".strip()
-        await MessageUtils.build_message(result).finish(reply_to=True)
-    await MessageUtils.build_message("没有找到该图片相关信息或数据已过期...").finish(
-        reply_to=True
-    )
-
-
 @_block_matcher.handle()
 async def _(bot: Bot, event: Event, arparma: Arparma, session: Uninfo):
     reply: Reply | None = await reply_fetch(event, bot)
     if reply and (pix_model := InfoManage.get(str(reply.id))):
         try:
-            result = await PixManage.block_pix(pix_model, arparma.find("u"))
+            result = await PixManage.block_pix(pix_model, arparma.find("uid"))
         except HTTPStatusError as e:
             logger.error(
                 "pix图库API出错...", arparma.header_result, session=session, e=e

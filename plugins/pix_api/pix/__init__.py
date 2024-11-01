@@ -1,7 +1,8 @@
 import asyncio
 
 from nonebot.rule import Rule
-from nonebot.adapters import Bot
+from nonebot_plugin_alconna.uniseg.tools import reply_fetch
+from nonebot.adapters import Bot, Event
 from httpx import HTTPStatusError
 from nonebot_plugin_uninfo import Uninfo
 from nonebot.plugin import PluginMetadata
@@ -38,6 +39,10 @@ __plugin_meta__ = PluginMetadata(
 
         示例：pix 萝莉 白丝
         示例：pix 萝莉 白丝 -n 10  （10为数量）
+        
+        
+        引用消息 /original  : 获取原图
+        引用消息 /info     : 查看图片信息
     """.strip(),
     extra=PluginExtraData(
         author="HibiKier",
@@ -50,6 +55,23 @@ __plugin_meta__ = PluginMetadata(
         limits=[BaseBlock(result="您有PIX图片正在处理，请稍等...")],
     ).dict(),
 )
+
+
+def reply_check() -> Rule:
+    """
+    检查是否存在回复消息
+
+    返回:
+        Rule: Rule
+    """
+
+    async def _rule(bot: Bot, event: Event):
+        if event.get_type() == "message":
+            return bool(await reply_fetch(event, bot))
+        return False
+
+    return Rule(_rule)
+
 
 _matcher = on_alconna(
     Alconna(
@@ -64,19 +86,21 @@ _matcher = on_alconna(
     block=True,
 )
 
+_original_matcher = on_alconna(
+    Alconna(["/"], "original"),
+    priority=5,
+    block=True,
+    use_cmd_start=False,
+    rule=reply_check(),
+)
 
-def reply_check() -> Rule:
-    """
-    检查是否存在回复消息
-
-    返回:
-        Rule: Rule
-    """
-
-    async def _rule(message: UniMsg):
-        return bool(message and isinstance(message[0], Reply))
-
-    return Rule(_rule)
+_info_matcher = on_alconna(
+    Alconna(["/"], "info"),
+    priority=5,
+    block=True,
+    use_cmd_start=False,
+    rule=reply_check(),
+)
 
 
 @_matcher.handle(parameterless=[CheckConfig("pix", "pix_api")])
@@ -127,3 +151,43 @@ async def _(
             msg_id = receipt.msg_ids[0]["message_id"]
             InfoManage.add(str(msg_id), pix)
     logger.info(f"pix tags: {tags.result}", arparma.header_result, session=session)
+
+
+@_original_matcher.handle()
+async def _(bot: Bot, event: Event, arparma: Arparma, session: Uninfo):
+    reply: Reply | None = await reply_fetch(event, bot)
+    if reply and (pix_model := InfoManage.get(str(reply.id))):
+        try:
+            result = await PixManage.get_image(pix_model, True)
+            if not result:
+                await MessageUtils.build_message("下载图片数据失败...").finish()
+        except HTTPStatusError as e:
+            logger.error(
+                "pix图库API出错...", arparma.header_result, session=session, e=e
+            )
+            await MessageUtils.build_message(
+                f"pix图库API出错啦！ code: {e.response.status_code}"
+            ).finish()
+        receipt: Receipt = await MessageUtils.build_message(result).send(reply_to=True)
+        msg_id = receipt.msg_ids[0]["message_id"]
+        InfoManage.add(str(msg_id), pix_model)
+    else:
+        await MessageUtils.build_message(
+            "没有找到该图片相关信息或数据已过期..."
+        ).finish(reply_to=True)
+
+
+@_info_matcher.handle()
+async def _(bot: Bot, event: Event):
+    reply: Reply | None = await reply_fetch(event, bot)
+    if reply and (pix_model := InfoManage.get(str(reply.id))):
+        result = f"""title: {pix_model.title}
+author: {pix_model.author}
+pid: {pix_model.pid}-{pix_model.img_p}
+uid: {pix_model.uid}
+nsfw: {pix_model.nsfw_tag}
+tags: {pix_model.tags}""".strip()
+        await MessageUtils.build_message(result).finish(reply_to=True)
+    await MessageUtils.build_message("没有找到该图片相关信息或数据已过期...").finish(
+        reply_to=True
+    )
