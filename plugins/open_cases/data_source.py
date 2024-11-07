@@ -60,6 +60,8 @@ def add_count(user: OpenCasesUser, skin: BuffSkin, case_price: float):
             user.knife_st_count += 1
         else:
             user.knife_count += 1
+    user.today_open_total += 1
+    user.total_count += 1
     user.make_money += skin.sell_min_price
     user.spend_money += int(17 + case_price)
 
@@ -276,6 +278,7 @@ class OpenCaseManager:
         """
         skin_list = await random_skin(case_name, num)
         if not skin_list:
+            logger.info(f"{case_name} 未抽取到任何皮肤...", "开箱")
             return MessageUtils.build_message("未抽取到任何皮肤...")
         case_price = 10
         log_list = []
