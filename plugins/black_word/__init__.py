@@ -12,9 +12,9 @@ __plugin_meta__ = PluginMetadata(
     usage="",
     extra=PluginExtraData(
         author="HibiKier",
-        version="0.1",
+        version="0.2",
         plugin_type=PluginType.PARENT,
-    ).dict(),
+    ).to_dict(),
 )
 
 nonebot.load_plugins(str(Path(__file__).parent.resolve()))

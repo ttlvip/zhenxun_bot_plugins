@@ -54,7 +54,8 @@ class PixManage:
             Path | None: 图片路径
         """
         url = pix.url
-        if is_original and (nginx_url := Config.get_config("pixiv", "PIXIV_NGINX_URL")):
+        nginx_url = Config.get_config("pixiv", "PIXIV_NGINX_URL")
+        if "limit_sanity_level" in url or (is_original and nginx_url):
             image_type = url.split(".")[-1]
             if pix.is_multiple:
                 url = f"https://{nginx_url}/{pix.pid}-{int(pix.img_p) + 1}.{image_type}"

@@ -12,7 +12,7 @@ __plugin_meta__ = PluginMetadata(
     usage="",
     extra=PluginExtraData(
         author="HibiKier",
-        version="0.5-36e70ae",
+        version="0.7",
         plugin_type=PluginType.PARENT,
         configs=[
             RegisterConfig(
@@ -23,7 +23,7 @@ __plugin_meta__ = PluginMetadata(
                 help="设置增删词库的权限等级",
             )
         ],
-    ).dict(),
+    ).to_dict(),
 )
 
 nonebot.load_plugins(str(Path(__file__).parent.resolve()))

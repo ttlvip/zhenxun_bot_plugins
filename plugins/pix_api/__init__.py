@@ -4,8 +4,8 @@ import nonebot
 from nonebot.plugin import PluginMetadata
 
 from zhenxun.configs.config import Config
+from zhenxun.configs.utils import Command, PluginExtraData, RegisterConfig
 from zhenxun.utils.enum import PluginType
-from zhenxun.configs.utils import RegisterConfig, PluginExtraData
 
 Config.set_name("pix", "PIX图库")
 
@@ -15,7 +15,7 @@ __plugin_meta__ = PluginMetadata(
     usage="",
     extra=PluginExtraData(
         author="HibiKier",
-        version="0.2",
+        version="0.3",
         plugin_type=PluginType.PARENT,
         configs=[
             RegisterConfig(
@@ -84,7 +84,7 @@ __plugin_meta__ = PluginMetadata(
                 default_value="",
             ),
         ],
-    ).dict(),
+    ).to_dict(),
 )
 
 

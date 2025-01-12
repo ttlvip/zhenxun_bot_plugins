@@ -1,30 +1,29 @@
 import asyncio
 
-from nonebot.rule import Rule
-from nonebot_plugin_alconna.uniseg.tools import reply_fetch
-from nonebot.adapters import Bot, Event
 from httpx import HTTPStatusError
-from nonebot_plugin_uninfo import Uninfo
+from nonebot.adapters import Bot, Event
 from nonebot.plugin import PluginMetadata
-from nonebot_plugin_alconna.uniseg import Receipt
+from nonebot.rule import Rule
 from nonebot_plugin_alconna import (
-    Args,
-    Query,
-    Reply,
-    Option,
-    UniMsg,
     Alconna,
+    Args,
     Arparma,
     MultiVar,
+    Option,
+    Query,
+    Reply,
     on_alconna,
     store_true,
 )
+from nonebot_plugin_alconna.uniseg import Receipt
+from nonebot_plugin_alconna.uniseg.tools import reply_fetch
+from nonebot_plugin_uninfo import Uninfo
 
-from zhenxun.services.log import logger
 from zhenxun.configs.config import BotConfig
+from zhenxun.configs.utils import BaseBlock, Command, PluginExtraData
+from zhenxun.services.log import logger
 from zhenxun.utils.depends import CheckConfig
 from zhenxun.utils.message import MessageUtils
-from zhenxun.configs.utils import BaseBlock, PluginExtraData
 
 from .._config import InfoManage
 from .data_source import PixManage, base_config
@@ -37,12 +36,37 @@ __plugin_meta__ = PluginMetadata(
         pix ?*[tags] ?[-n 1]: 通过 tag 获取相似图片，不含tag时随机抽取,
                 -n表示数量, -r表示查看r18, -noai表示过滤ai
 
-        示例：pix 萝莉 白丝
-        示例：pix 萝莉 白丝 -n 10  （10为数量）
-        
-        
-        引用消息 /original  : 获取原图
-        引用消息 /info     : 查看图片信息
+            示例：pix 萝莉 白丝
+            示例：pix 萝莉 白丝 -n 10  （10为数量）
+
+        pix图库 ?[tags](使用空格分隔)
+
+        引用消息 /star                      : 收藏图片
+        引用消息 /unatar                    : 取消收藏图片
+        引用消息 /original                  : 获取原图
+        引用消息 /info                      : 查看图片信息
+        引用消息 /block ?[level] ?[--all]   : block该pid
+            默认level为2，可选[1, 2], 1程度较轻，含有all时block该pid下所有图片
+        引用消息 /block -u                  : block该uid下的所有图片
+        引用消息 / nsfw n                   : 设置nsfw等级 n = [0, 1, 2] 其中
+            0: 普通
+            1: 色图
+            2: R18
+
+        pix添加 ['u', 'p'] [*content]: 可同时添加多个pid和uid
+            u: uid
+            p: pid
+            示例:
+                pix添加 u 123456789
+                pix添加 p 123456789
+                pix添加 u 123456789 12312332
+
+        pix收藏           : 查看个人收藏
+        pix排行 ?[10] -r: 查看收藏排行, 默认获取前10，包含-r时会获取包括r18在内的排行
+
+        pixtag ?[10] : 查看排名前10的tag，最大不能超过30
+            示例:
+                pixtag 20
     """.strip(),
     extra=PluginExtraData(
         author="HibiKier",
@@ -52,8 +76,13 @@ __plugin_meta__ = PluginMetadata(
         指令：
             pix -s ?*[tags]: 通过tag获取色图，不含tag时随机
         """,
+        commands=[
+            Command(command="pix ?*[tags] ?[-n 1]"),
+            Command(command="[引用消息] /original"),
+            Command(command="[引用消息] /info"),
+        ],
         limits=[BaseBlock(result="您有PIX图片正在处理，请稍等...")],
-    ).dict(),
+    ).to_dict(),
 )
 
 
@@ -143,7 +172,7 @@ async def _(
         and session.group
     ):
         await MessageUtils.alc_forward_msg(
-            [r[0] for r in result_list], session.user.id, BotConfig.self_nickname
+            [r[0] for r in result_list], bot.self_id, BotConfig.self_nickname
         ).send()
     else:
         for r, pix in result_list:
